@@ -43,7 +43,7 @@ const k = kaplay({
             keyboard: "l",
         },
         p2_fire: {
-            keyboard: "control",
+            keyboard: ".",
         },
         p2_dash: {
             keyboard: "u",
