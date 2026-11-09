@@ -69,7 +69,7 @@ k.loadCrew("font", "happy");
 k.loadCrew("sprite", "bean");
 k.loadCrew("sprite", "mark");
 
-k.add([
+const bg = k.add([
     k.pos(0, 0),
     k.rect(k.width(), k.height()),
     k.color("#c499f2"),
@@ -85,21 +85,27 @@ function randomPos(padding = 0) {
     );
 }
 
-function button(text: string, pos: kt.Vec2, onClick: () => void, opts: { padding?: kt.Vec2, fontSize?: number } = {}) {
+function button(
+    text: string,
+    pos: kt.Vec2,
+    onClick: () => void,
+    opts: { padding?: kt.Vec2; fontSize?: number } = {},
+) {
     const padding = opts.padding ?? k.vec2(25, 10);
     const fmtText = k.formatText({
         text,
         size: opts.fontSize ?? 24,
     });
     const btn = k.add([
-        k.rect(fmtText.width + padding.x * 2, fmtText.height + padding.y * 2, { radius: 5 }),
+        k.rect(fmtText.width + padding.x * 2, fmtText.height + padding.y * 2, {
+            radius: 5,
+        }),
         k.outline(2, k.BLACK),
         k.anchor("center"),
         k.color("#6f459c"),
         k.pos(pos),
-        k.stay(),
         k.area(),
-        k.scale()
+        k.scale(),
     ]);
     fmtText.opt.pos = k.vec2(-fmtText.width / 2, -fmtText.height / 2);
     btn.onDraw(() => {
@@ -120,6 +126,7 @@ function button(text: string, pos: kt.Vec2, onClick: () => void, opts: { padding
 interface StaminaComp extends kt.Comp {
     stamina: number;
     recharging: boolean;
+    consumeStamina: (amount: number) => void;
 }
 
 function stamina(): StaminaComp {
@@ -138,103 +145,171 @@ function stamina(): StaminaComp {
                 });
                 k.drawCircle({
                     pos: k.vec2(-25, -25),
-                    radius: (stamina / 100) * 10,
+                    radius: Math.round((stamina / 100) * 10),
                     color: recharging ? k.RED : k.GREEN,
                 });
+            }
+        },
+        consumeStamina(amount: number) {
+            this.stamina -= amount;
+            if (this.stamina < 0) {
+                this.stamina = 0;
             }
         },
         update() {
             this.stamina += k.dt() * 10;
             if (this.stamina < 10) {
                 this.recharging = true;
-            } else if (this.stamina >= 90 && this.recharging) {
+            } else if (this.stamina >= 50 && this.recharging) {
                 this.recharging = false;
             }
             this.stamina = k.clamp(this.stamina, 0, 100);
         },
     };
 }
-const PLAYER_SPEED = 1e2;
+const PLAYER_SPEED = 2e2;
 
 k.scene("winner", (winner) => {
-    k.setGravity(3600);
-    const spawner = k.add([
-        k.timer()
-    ]);
-    spawner.loop(0.1, () => {
-        spawner.add([
+    k.setGravity(1000);
+    const spawner = k.add([k.timer()]);
+    spawner.loop(0.02, () => {
+        let x = k.randi(0, k.width() / 2) + k.randi(0, k.width() / 2); // Prefer center
+        const obj = spawner.add([
             k.sprite(k.choose(objs)),
-            k.pos(k.randi(0, k.width()), -60),
+            k.pos(x, -60),
             k.anchor("center"),
-            k.area(),
-            k.body(),
-            k.offscreen({ destroy: true })
+            k.area({ collisionIgnore: ["wall"] }),
+            k.body({ stickToPlatform: false }),
+            k.offscreen({ destroy: true }),
+            "falling"
         ]);
+        obj.onCollide("player", (player) => {
+            obj.destroy();
+            player.score += 1;
+        });
     });
+
+    const player = k.add([
+        k.sprite(winner === "P1" ? "bean" : "mark"),
+        k.pos(k.width() / 2, k.height() - 50),
+        k.anchor("center"),
+        k.area(),
+        k.body(),
+        { moveVel: k.vec2(), score: 0 },
+        "player",
+    ]);
     if (winner === "P1") {
         k.add([
             k.pos(k.width() / 2, k.height() / 2),
             k.text(`Winner: Player 1`, { size: 32 }),
             k.anchor("center"),
         ]);
+        player.onButtonDown("p1_left", () => {
+            player.moveVel.x = -PLAYER_SPEED;
+        });
+        player.onButtonDown("p1_right", () => {
+            player.moveVel.x = PLAYER_SPEED;
+        });
+        player.onButtonPress("p1_jump", () => {
+            if (player.isGrounded()) {
+                player.jump();
+            }
+        });
     } else if (winner === "P2") {
         k.add([
             k.pos(k.width() / 2, k.height() / 2),
             k.text(`Winner: Player 2`, { size: 32 }),
             k.anchor("center"),
         ]);
+        player.onButtonDown("p2_left", () => {
+            player.moveVel.x = -PLAYER_SPEED;
+        });
+        player.onButtonDown("p2_right", () => {
+            player.moveVel.x = PLAYER_SPEED;
+        });
+        player.onButtonPress("p2_jump", () => {
+            if (player.isGrounded()) {
+                player.jump();
+            }
+        });
     }
+    player.onUpdate(() => {
+        player.moveBy(
+            processMoveVel(player.moveVel).scale(2),
+        );
+        player.moveVel.x = 0;
+        player.moveVel.y = 0;
+    });
+    player.onDraw(() => {
+        k.drawText({
+            text: `Score: ${player.score}`,
+            pos: k.vec2(0, -50),
+            size: 16,
+        });
+    });
     button("Restart", k.vec2(k.width() / 2, k.height() / 2 + 50), () => {
         k.go("game");
     });
 });
+k.add([
+    k.pos(0, -30),
+    k.rect(k.width(), 30),
+    k.color("#422c59"),
+    k.area(),
+    k.stay(),
+    k.body({
+        isStatic: true,
+    }),
+    k.z(-1),
+    "wall",
+]);
+k.add([
+    k.pos(0, k.height()),
+    k.rect(k.width(), 30),
+    k.color("#422c59"),
+    k.area(),
+    k.stay(),
+    k.body({
+        isStatic: true,
+    }),
+    k.z(-1),
+    "wall",
+]);
+k.add([
+    k.pos(k.width(), 0),
+    k.rect(30, k.height()),
+    k.color("#422c59"),
+    k.area(),
+    k.stay(),
+    k.body({
+        isStatic: true,
+    }),
+    k.z(-1),
+    "wall",
+]);
+k.add([
+    k.pos(-30, 0),
+    k.rect(30, k.height()),
+    k.color("#422c59"),
+    k.area(),
+    k.stay(),
+    k.body({
+        isStatic: true,
+    }),
+    k.z(-1),
+    "wall",
+]);
+
+function processMoveVel(vec: kt.Vec2) {
+    const length = vec.len() / PLAYER_SPEED;
+    if (length > 0) {
+        vec = vec.scale(Math.min(1, 1 / length));
+    }
+    return k.vec2(vec.x * k.dt(), vec.y * k.dt());
+}
 
 k.scene("game", () => {
-    k.add([
-        k.pos(0, -30),
-        k.rect(k.width(), 30),
-        k.color("#422c59"),
-        k.area(),
-        k.body({
-            isStatic: true
-        }),
-        k.z(-1),
-        "wall"
-    ]);
-    k.add([
-        k.pos(0, k.height()),
-        k.rect(k.width(), 30),
-        k.color("#422c59"),
-        k.area(),
-        k.body({
-            isStatic: true
-        }),
-        k.z(-1),
-        "wall"
-    ]);
-    k.add([
-        k.pos(k.width(), 0),
-        k.rect(30, k.height()),
-        k.color("#422c59"),
-        k.area(),
-        k.body({
-            isStatic: true
-        }),
-        k.z(-1),
-        "wall"
-    ]);
-    k.add([
-        k.pos(-30, 0),
-        k.rect(30, k.height()),
-        k.color("#422c59"),
-        k.area(),
-        k.body({
-            isStatic: true
-        }),
-        k.z(-1),
-        "wall"
-    ]);
-    k.setGravity(0)
+    k.setGravity(0);
     const p1 = k.add([
         k.sprite("bean"),
         k.pos(randomPos(50)),
@@ -261,13 +336,14 @@ k.scene("game", () => {
         k.sprite(k.choose(objs)),
         k.pos(randomPos(50)),
         k.anchor("center"),
-        k.area(),
+        k.area({ isSensor: true }),
     ]);
 
     collectible.onCollide("player", (p) => {
         p.score += 1;
         collectible.pos = randomPos(50);
         collectible.sprite = k.choose(objs);
+        collectible.isSensor = true;
         const other = p === p1 ? p2 : p1;
         while (
             collectible.pos.dist(p.pos) < 150 ||
@@ -313,15 +389,15 @@ k.scene("game", () => {
     k.onButtonDown("p1_dash", () => {
         if (p1.stamina <= 0 || p1.recharging || p1.moveVel.len() === 0) return;
         p1.moveBy(processMoveVel(p1.moveVel).scale(5));
-        p1.stamina -= 200 * k.dt();
+        p1.consumeStamina(200 * k.dt());
     });
     k.onButtonDown("p2_dash", () => {
         if (p2.stamina <= 0 || p2.recharging || p2.moveVel.len() === 0) return;
         p2.moveBy(processMoveVel(p2.moveVel).scale(5));
-        p2.stamina -= 200 * k.dt();
+        p2.consumeStamina(200 * k.dt());
     });
 
-    k.onDraw(() => {
+    k.add([k.fixed(),k.z(2)]).onDraw(() => {
         const text = k.formatText({
             text: `${p1.score} - ${p2.score}`,
             pos: k.vec2(k.width() / 2, 10),
@@ -331,12 +407,26 @@ k.scene("game", () => {
         k.drawFormattedText(text);
     });
 
+    p1.onUpdate(() => {
+        if (p1.score < p2.score && p1.stamina < 100) {
+            // give a stamina boost if behind
+            p1.stamina += k.dt() * 20;
+        }
+    });
+
+    p2.onUpdate(() => {
+        if (p2.score < p1.score && p2.stamina < 100) {
+            // give a stamina boost if behind
+            p2.stamina += k.dt() * 20;
+        }
+    });
+
     k.onButtonPress("p1_fire", () => {
         if (p1.stamina <= 0 || p1.recharging) return;
-        p1.stamina -= 20;
+        p1.consumeStamina(20);
         const projectile = k.add([
             k.pos(p1.pos),
-            k.area(),
+            k.area({ isSensor: true }),
             k.rect(5, 5),
             k.color(k.WHITE),
             k.move(p2.pos.angle(p1.pos), 300),
@@ -345,26 +435,28 @@ k.scene("game", () => {
         ]);
         projectile.onCollide("player", (p) => {
             if (p !== p1) {
-                p.stamina -= 40;
+                p1.stamina += 5;
+                p.consumeStamina(40);
                 projectile.destroy();
             }
         });
     });
     k.onButtonPress("p2_fire", () => {
         if (p2.stamina <= 0 || p2.recharging) return;
-        p2.stamina -= 20;
+        p2.consumeStamina(20);
         const projectile = k.add([
             k.pos(p2.pos),
+            k.area({ isSensor: true }),
             k.rect(5, 5),
             k.color(k.WHITE),
-            k.area(),
             k.move(p1.pos.angle(p2.pos), 300),
             k.offscreen({ destroy: true }),
             "projectile",
         ]);
         projectile.onCollide("player", (p) => {
             if (p !== p2) {
-                p.stamina -= 40;
+                p2.stamina += 5;
+                p.consumeStamina(40);
                 projectile.destroy();
             }
         });
@@ -387,13 +479,6 @@ k.scene("game", () => {
         });
     });
 
-    function processMoveVel(vec: kt.Vec2) {
-        const length = vec.len() / PLAYER_SPEED;
-        if (length > 0) {
-            vec = vec.scale(Math.min(1, 1 / length));
-        }
-        return k.vec2(vec.x * k.dt(), vec.y * k.dt());
-    }
 
     k.onUpdate(() => {
         p1.moveBy(
@@ -415,4 +500,4 @@ k.scene("game", () => {
     });
 });
 
-k.go("game")
+k.go("game");

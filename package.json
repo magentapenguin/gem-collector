@@ -9,6 +9,6 @@
   },
   "dependencies": {
     "@kaplayjs/crew": "^2.1.0",
-    "kaplay": "^3001.0.19"
+    "kaplay": "next"
   }
 }
