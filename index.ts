@@ -248,7 +248,7 @@ k.scene("winner", (winner) => {
         });
     });
     button("Restart", k.vec2(k.width() / 2, k.height() / 2 + 50), () => {
-        k.go("game");
+        k.go("main_menu");
     });
 });
 k.add([
@@ -308,8 +308,7 @@ function processMoveVel(vec: kt.Vec2) {
     return k.vec2(vec.x * k.dt(), vec.y * k.dt());
 }
 
-k.scene("game", () => {
-    k.setGravity(0);
+function setupPlayers() {
     const p1 = k.add([
         k.sprite("bean"),
         k.pos(randomPos(50)),
@@ -320,7 +319,7 @@ k.scene("game", () => {
         { moveVel: k.vec2(), score: 0 },
         "player",
     ]);
-
+    
     const p2 = k.add([
         k.sprite("mark"),
         k.pos(randomPos(50)),
@@ -331,61 +330,38 @@ k.scene("game", () => {
         { moveVel: k.vec2(), score: 0 },
         "player",
     ]);
-
-    const collectible = k.add([
-        k.sprite(k.choose(objs)),
-        k.pos(randomPos(50)),
-        k.anchor("center"),
-        k.area({ isSensor: true }),
-    ]);
-
-    collectible.onCollide("player", (p) => {
-        p.score += 1;
-        collectible.pos = randomPos(50);
-        collectible.sprite = k.choose(objs);
-        collectible.isSensor = true;
-        const other = p === p1 ? p2 : p1;
-        while (
-            collectible.pos.dist(p.pos) < 150 ||
-            collectible.pos.dist(other.pos) < 50 // Give the other player a fair chance to reach it
-        ) {
-            console.log("Collectible too close to players, repositioning...");
-            collectible.pos = randomPos(50);
-        }
-    });
-
     k.onButtonDown("p1_up", () => {
         p1.moveVel.y = -PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p1_down", () => {
         p1.moveVel.y = PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p1_left", () => {
         p1.moveVel.x = -PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p1_right", () => {
         p1.moveVel.x = PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p2_up", () => {
         p2.moveVel.y = -PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p2_down", () => {
         p2.moveVel.y = PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p2_left", () => {
         p2.moveVel.x = -PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p2_right", () => {
         p2.moveVel.x = PLAYER_SPEED;
     });
-
+    
     k.onButtonDown("p1_dash", () => {
         if (p1.stamina <= 0 || p1.recharging || p1.moveVel.len() === 0) return;
         p1.moveBy(processMoveVel(p1.moveVel).scale(5));
@@ -396,7 +372,7 @@ k.scene("game", () => {
         p2.moveBy(processMoveVel(p2.moveVel).scale(5));
         p2.consumeStamina(200 * k.dt());
     });
-
+    
     k.add([k.fixed(),k.z(2)]).onDraw(() => {
         const text = k.formatText({
             text: `${p1.score} - ${p2.score}`,
@@ -406,21 +382,21 @@ k.scene("game", () => {
         text.opt.pos = k.vec2(k.width() / 2 - text.width / 2, 10);
         k.drawFormattedText(text);
     });
-
+    
     p1.onUpdate(() => {
         if (p1.score < p2.score && p1.stamina < 100) {
             // give a stamina boost if behind
             p1.stamina += k.dt() * 20;
         }
     });
-
+    
     p2.onUpdate(() => {
         if (p2.score < p1.score && p2.stamina < 100) {
             // give a stamina boost if behind
             p2.stamina += k.dt() * 20;
         }
     });
-
+    
     k.onButtonPress("p1_fire", () => {
         if (p1.stamina <= 0 || p1.recharging) return;
         p1.consumeStamina(20);
@@ -461,7 +437,7 @@ k.scene("game", () => {
             }
         });
     });
-
+    
     p1.onDraw(() => {
         k.drawText({
             text: "P1",
@@ -478,8 +454,8 @@ k.scene("game", () => {
             align: "center",
         });
     });
-
-
+    
+    
     k.onUpdate(() => {
         p1.moveBy(
             processMoveVel(p1.moveVel).scale(k.clamp(p1.stamina / 50, 0.2, 1)),
@@ -498,6 +474,84 @@ k.scene("game", () => {
             k.go("winner", "P2");
         }
     });
+    return { p1, p2 }
+}
+
+k.scene("game_grab", () => {
+    k.setGravity(0);
+
+    const { p1, p2 } = setupPlayers();
+
+    const collectible = k.add([
+        k.sprite(k.choose(objs)),
+        k.pos(randomPos(50)),
+        k.anchor("center"),
+        k.area({ isSensor: true }),
+    ]);
+
+    collectible.onCollide("player", (p) => {
+        p.score += 1;
+        collectible.pos = randomPos(50);
+        collectible.sprite = k.choose(objs);
+        collectible.isSensor = true;
+        const other = p === p1 ? p2 : p1;
+        while (
+            collectible.pos.dist(p.pos) < 150 ||
+            collectible.pos.dist(other.pos) < 50 // Give the other player a fair chance to reach it
+        ) {
+            console.log("Collectible too close to players, repositioning...");
+            collectible.pos = randomPos(50);
+        }
+    });
+
 });
 
-k.go("game");
+k.scene("game_shoot", () => {
+    k.setGravity(0);
+
+    const { p1, p2 } = setupPlayers();
+
+    p1.onUpdate(() => {
+        if (p1.stamina <= 5) {
+            p2.score += 1;
+            p1.stamina = 100;
+            p1.pos = randomPos(50);
+        }
+    });
+    p2.onUpdate(() => {
+        if (p2.stamina <= 5) {
+            p1.score += 1;
+            p2.stamina = 100;
+            p2.pos = randomPos(50);
+        }
+    });
+
+});
+
+k.scene("main_menu", () => {
+    k.add([
+        k.text("Gem Collector"),
+        k.anchor("center"),
+        k.pos(k.width() / 2, 100)
+    ]);
+    button(
+        "Play",
+        k.vec2(k.width() / 2, 200),
+        () => k.go("game_grab"),
+        {
+            fontSize: 24
+        }
+    );
+    button(
+        "Play Battle Mode",
+        k.vec2(k.width() / 2, 260),
+        () => k.go("game_shoot"),
+        {
+            fontSize: 24
+        }
+    );
+});
+k.onUpdate(() => {
+    
+    k.go("main_menu");
+});
