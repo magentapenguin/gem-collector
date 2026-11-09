@@ -5,7 +5,6 @@ import type * as kt from "kaplay";
 const k = kaplay({
     plugins: [crew],
     font: "happy",
-    debugKey: "h",
     width: 4 * 300,
     height: 3 * 300,
     letterbox: true,
@@ -254,7 +253,7 @@ k.scene("game", () => {
         k.area(),
         k.body(),
         stamina(),
-        { moveVel: k.vec2(), score: 9 },
+        { moveVel: k.vec2(), score: 0 },
         "player",
     ]);
 
