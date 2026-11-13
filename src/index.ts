@@ -5,6 +5,7 @@ import { button, randomPos } from "./utils";
 import { stamina } from "./stamina";
 import { objs } from "./resources";
 import { ProjectileType, projectiles, shootProjectile } from "./projectile";
+import './winScreen';
 
 export const k = kaplay({
     plugins: [crew],
@@ -61,6 +62,15 @@ export const k = kaplay({
 });
 
 export default k;
+
+for (const obj of objs) {
+    k.loadCrew("sprite", obj);
+}
+
+k.loadCrew("font", "happy");
+
+k.loadCrew("sprite", "bean");
+k.loadCrew("sprite", "mark");
 
 const bg = k.add([
     k.pos(0, 0),
