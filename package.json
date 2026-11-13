@@ -8,6 +8,7 @@
     "vite": "^6.4.5"
   },
   "dependencies": {
+    "@colyseus/sdk": "^0.18.10",
     "@kaplayjs/crew": "^2.1.0",
     "kaplay": "next"
   }
