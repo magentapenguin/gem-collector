@@ -1,67 +1,12 @@
-import { crew } from "@kaplayjs/crew";
-import kaplay from "kaplay";
 import type * as kt from "kaplay";
+import { k } from "./kaplay";
 import { button, randomPos } from "./utils";
 import { stamina } from "./stamina";
 import { objs } from "./resources";
 import { ProjectileType, projectiles, shootProjectile } from "./projectile";
+
+
 import './winScreen';
-
-export const k = kaplay({
-    plugins: [crew],
-    font: "happy",
-    width: 4 * 300,
-    height: 3 * 300,
-    letterbox: true,
-    pixelDensity: 2,
-    background: "#422c59",
-    buttons: {
-        p1_up: {
-            keyboard: "w",
-        },
-        p1_down: {
-            keyboard: "s",
-        },
-        p1_left: {
-            keyboard: "a",
-        },
-        p1_right: {
-            keyboard: "d",
-        },
-        p1_fire: {
-            keyboard: "space",
-        },
-        p1_dash: {
-            keyboard: "q",
-        },
-        p1_switch: {
-            keyboard: "e",
-        },
-        p2_up: {
-            keyboard: "i",
-        },
-        p2_down: {
-            keyboard: "k",
-        },
-        p2_left: {
-            keyboard: "j",
-        },
-        p2_right: {
-            keyboard: "l",
-        },
-        p2_fire: {
-            keyboard: ".",
-        },
-        p2_dash: {
-            keyboard: "u",
-        },
-        p2_switch: {
-            keyboard: "o",
-        },
-    },
-});
-
-export default k;
 
 for (const obj of objs) {
     k.loadCrew("sprite", obj);
@@ -139,6 +84,7 @@ export function processMoveVel(vec: kt.Vec2) {
     }
     return k.vec2(vec.x * k.dt(), vec.y * k.dt());
 }
+
 
 function setupPlayers() {
     const p1 = k.add([
@@ -232,14 +178,14 @@ function setupPlayers() {
 
     k.onButtonPress("p1_switch", () => {
         p1.selectedWeapon = (p1.selectedWeapon + 1) % Object.keys(projectiles).length;
-        if (projectiles[p1.selectedWeapon].hidden) {
+        if (projectiles[p1.selectedWeapon].hidden && !(window.extra === "p1")) {
             p1.selectedWeapon = (p1.selectedWeapon + 1) % Object.keys(projectiles).length;
         }
         p1.lastWeaponChange = k.time();
     });
     k.onButtonPress("p2_switch", () => {
         p2.selectedWeapon = (p2.selectedWeapon + 1) % Object.keys(projectiles).length;
-        if (projectiles[p2.selectedWeapon].hidden) {
+        if (projectiles[p2.selectedWeapon].hidden && !(window.extra === "p2")) {
             p2.selectedWeapon = (p2.selectedWeapon + 1) % Object.keys(projectiles).length;
         }
         p2.lastWeaponChange = k.time();

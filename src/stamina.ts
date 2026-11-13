@@ -1,5 +1,6 @@
 import type * as kt from "kaplay";
-import { k } from ".";
+
+import { k } from "./kaplay";
 
 interface StaminaComp extends kt.Comp {
     stamina: number;
