@@ -29,6 +29,9 @@ const k = kaplay({
         p1_dash: {
             keyboard: "q",
         },
+        p1_switch: {
+            keyboard: "e",
+        },
         p2_up: {
             keyboard: "i",
         },
@@ -46,6 +49,9 @@ const k = kaplay({
         },
         p2_dash: {
             keyboard: "u",
+        },
+        p2_switch: {
+            keyboard: "o",
         },
     },
 });
@@ -158,7 +164,7 @@ function stamina(): StaminaComp {
         },
         update() {
             this.stamina += k.dt() * 10;
-            if (this.stamina < 10) {
+            if (this.stamina < 20) {
                 this.recharging = true;
             } else if (this.stamina >= 50 && this.recharging) {
                 this.recharging = false;
@@ -178,7 +184,7 @@ k.scene("winner", (winner) => {
             k.sprite(k.choose(objs)),
             k.pos(x, -60),
             k.anchor("center"),
-            k.area({ collisionIgnore: ["wall"] }),
+            k.area({ collisionIgnore: ["wall", "outer_wall"] }),
             k.body({ stickToPlatform: false }),
             k.offscreen({ destroy: true }),
             "falling"
@@ -210,7 +216,7 @@ k.scene("winner", (winner) => {
         player.onButtonDown("p1_right", () => {
             player.moveVel.x = PLAYER_SPEED;
         });
-        player.onButtonPress("p1_jump", () => {
+        player.onButtonPress("p1_up", () => {
             if (player.isGrounded()) {
                 player.jump();
             }
@@ -227,7 +233,7 @@ k.scene("winner", (winner) => {
         player.onButtonDown("p2_right", () => {
             player.moveVel.x = PLAYER_SPEED;
         });
-        player.onButtonPress("p2_jump", () => {
+        player.onButtonPress("p2_up", () => {
             if (player.isGrounded()) {
                 player.jump();
             }
@@ -261,7 +267,7 @@ k.add([
         isStatic: true,
     }),
     k.z(-1),
-    "wall",
+    "outer_wall",
 ]);
 k.add([
     k.pos(0, k.height()),
@@ -273,7 +279,7 @@ k.add([
         isStatic: true,
     }),
     k.z(-1),
-    "wall",
+    "outer_wall",
 ]);
 k.add([
     k.pos(k.width(), 0),
@@ -285,7 +291,7 @@ k.add([
         isStatic: true,
     }),
     k.z(-1),
-    "wall",
+    "outer_wall",
 ]);
 k.add([
     k.pos(-30, 0),
@@ -297,7 +303,7 @@ k.add([
         isStatic: true,
     }),
     k.z(-1),
-    "wall",
+    "outer_wall",
 ]);
 
 function processMoveVel(vec: kt.Vec2) {
@@ -308,6 +314,196 @@ function processMoveVel(vec: kt.Vec2) {
     return k.vec2(vec.x * k.dt(), vec.y * k.dt());
 }
 
+enum ProjectileType {
+    NORMAL,
+    TRACKING,
+    SCATTERTRACK,
+    SCATTER,
+    TRANSGENDERDEATHRAY,
+}
+
+const projectiles = {
+    [ProjectileType.NORMAL]: {
+        staminaCost: 10,
+        name: "Standard"
+    },
+    [ProjectileType.TRACKING]: {
+        staminaCost: 70,
+        name: "Tracking"
+    },
+    [ProjectileType.SCATTERTRACK]: {
+        staminaCost: 50,
+        name: "Scatter Tracking"
+    },
+    [ProjectileType.SCATTER]: {
+        staminaCost: 12,
+        name: "Scatter"
+    }
+}
+
+function projectile(sender: kt.GameObj, opts: {
+    damage?: number
+    vamp?: number
+    maxAge?: number
+    maxAgeRange?: number
+} = {}) {
+    return {
+        require: ["area"],
+        start: 0,
+        maxAge: null,
+        age() {
+            return k.time() - this.start;
+        },
+        update() {
+            if (this.maxAge !== null) {
+                if (this.age() > this.maxAge) {
+                    this.destroy();
+                } else if (this.age() + 2 > this.maxAge) {
+                    this.opacity = (this.maxAge - this.age()) / 2;
+                }
+            }
+        },
+        sender: sender,
+        add() {
+            this.start = k.time();
+            this.maxAge = opts.maxAge ?? null;
+            if (opts.maxAgeRange !== undefined && opts.maxAge !== undefined) {
+                this.maxAge += k.rand(-opts.maxAgeRange, opts.maxAgeRange);
+            }
+            this.onCollide("player", (p) => {
+                if (p === sender && this.age() < 0.5) return;
+                if (sender.stamina !== undefined && p !== sender)
+                    sender.stamina += opts.vamp ?? 15;
+                p.consumeStamina(opts.damage ?? 20);
+                this.destroy();
+            });
+            this.onCollide("wall", () => {
+                this.destroy();
+            });
+            this.onCollide("projectile", (other) => {
+                if (other.sender === sender) return;
+                this.destroy();
+                other.destroy();
+            });
+        },
+    }
+}
+
+function shootProjectile(shooter: kt.GameObj, target: kt.GameObj, type: ProjectileType = ProjectileType.TRACKING): kt.GameObj[] {
+    function createProjectile(angle: number, opts: { size?: kt.Vec2, comp?: kt.Comp[], projectileOpts?: { damage?: number, vamp?: number, maxAge?: number } } = {}) {
+        return k.add([
+            k.pos(shooter.pos),
+            k.area({ isSensor: true }),
+            k.rect(opts.size?.x ?? 5, opts.size?.y ?? 5),
+            k.color(k.WHITE),
+            k.rotate(angle),
+            k.offscreen({ destroy: true }),
+            projectile(shooter, opts.projectileOpts),
+            "projectile",
+            ...(opts.comp ?? []),
+        ]);
+    }
+    switch (type) {
+        case ProjectileType.SCATTER: {
+            const count = 5;
+            const angles = [];
+            for (let i = 0; i < count; i++) {
+                angles.push(target.pos.angle(shooter.pos) - (count * 5 / 2) + (i * 5));
+            }
+            const projectiles = [];
+            for (const angle of angles) {
+                let proj = createProjectile(angle, { projectileOpts: { damage: 5, vamp: 0, maxAge: 3, maxAgeRange: 2 } });
+                proj.onUpdate(() => {
+                    proj.move(k.Vec2.fromAngle(angle).scale(300));
+                });
+                projectiles.push(proj);
+            }
+            
+            return projectiles;
+        }
+
+        case ProjectileType.TRACKING: {
+            const angle = target.pos.angle(shooter.pos);
+            const proj = createProjectile(angle, { size: k.vec2(15, 5), projectileOpts: { damage: 90, vamp: 95, maxAge: 8 } });
+            proj.onUpdate(() => {
+                const angle = k.lerpAngle(proj.angle, target.pos.angle(proj.pos), k.dt() * 5);
+                proj.angle = angle;
+                proj.move(k.Vec2.fromAngle(angle).scale(200));
+            });
+            return [proj];
+        }
+
+        case ProjectileType.SCATTERTRACK: {
+            const count = 8;
+            const angles = [];
+            for (let i = 0; i < count; i++) {
+                angles.push(target.pos.angle(shooter.pos) - (count * 15 / 2) + (i * 15));
+            }
+            const projectiles = [];
+            for (const angle of angles) {
+                const proj = createProjectile(angle, { size: k.vec2(8, 5), projectileOpts: { damage: 1, vamp: 0, maxAge: 3, maxAgeRange: 2 } });
+                proj.onUpdate(() => {
+                    const angle = k.lerpAngle(proj.angle, target.pos.angle(proj.pos), k.dt() * 2);
+                    proj.angle = angle;
+                    proj.move(k.Vec2.fromAngle(angle).scale(400));
+                });
+                projectiles.push(proj);
+            }
+            return projectiles;
+        }
+        
+        case ProjectileType.NORMAL: {
+            const proj = createProjectile(target.pos.angle(shooter.pos));
+            proj.onUpdate(() => {
+                proj.move(k.Vec2.fromAngle(proj.angle).scale(300));
+            });
+            return [proj];
+        }
+
+        case ProjectileType.TRANSGENDERDEATHRAY: {
+            const proj = k.add([
+                k.pos(shooter.pos),
+                k.rect(k.width() + k.height(), 15),
+                k.color(0, 255, 255),
+                k.area({ isSensor: true }),
+                k.rotate(shooter.pos.angle(target.pos)),
+                k.anchor("right"),
+                k.opacity(1),
+                "projectile"
+            ]);
+            proj.add([
+                k.rect(proj.width, proj.height / 5 * 3),
+                k.pos(0, 0),
+                k.anchor("right"),
+                k.color(255, 0, 255),
+                k.opacity(1),
+            ])
+            proj.add([
+                k.rect(proj.width, proj.height / 5),
+                k.pos(0, 0),
+                k.anchor("right"),
+                k.color(255, 255, 255),
+                k.opacity(1),
+            ])
+            proj.onUpdate(() => {
+                proj.opacity -= k.clamp(1 - proj.opacity + 0.01, 0, 1) * 4 * k.dt();
+                proj.children.forEach(child => {
+                    child.opacity = proj.opacity;
+                });
+                if (proj.opacity <= 0) {
+                    proj.destroy();
+                }
+            })
+            proj.onCollideUpdate("player", (p) => {
+                if (p === shooter) return;
+                shooter.stamina += 2
+                p.consumeStamina(proj.opacity);
+            });
+            return [proj];
+        }
+    }
+}
+
 function setupPlayers() {
     const p1 = k.add([
         k.sprite("bean"),
@@ -316,7 +512,7 @@ function setupPlayers() {
         k.area(),
         k.body(),
         stamina(),
-        { moveVel: k.vec2(), score: 0 },
+        { moveVel: k.vec2(), score: 0, selectedWeapon: ProjectileType.NORMAL, lastWeaponChange: 0 },
         "player",
     ]);
     
@@ -327,7 +523,7 @@ function setupPlayers() {
         k.area(),
         k.body(),
         stamina(),
-        { moveVel: k.vec2(), score: 0 },
+        { moveVel: k.vec2(), score: 0, selectedWeapon: ProjectileType.NORMAL, lastWeaponChange: 0 },
         "player",
     ]);
     k.onButtonDown("p1_up", () => {
@@ -363,12 +559,12 @@ function setupPlayers() {
     });
     
     k.onButtonDown("p1_dash", () => {
-        if (p1.stamina <= 0 || p1.recharging || p1.moveVel.len() === 0) return;
+        if (p1.stamina <= 20 || p1.recharging || p1.moveVel.len() === 0) return;
         p1.moveBy(processMoveVel(p1.moveVel).scale(5));
         p1.consumeStamina(200 * k.dt());
     });
     k.onButtonDown("p2_dash", () => {
-        if (p2.stamina <= 0 || p2.recharging || p2.moveVel.len() === 0) return;
+        if (p2.stamina <= 20 || p2.recharging || p2.moveVel.len() === 0) return;
         p2.moveBy(processMoveVel(p2.moveVel).scale(5));
         p2.consumeStamina(200 * k.dt());
     });
@@ -396,46 +592,26 @@ function setupPlayers() {
             p2.stamina += k.dt() * 20;
         }
     });
+
+
+    k.onButtonPress("p1_switch", () => {
+        p1.selectedWeapon = (p1.selectedWeapon + 1) % Object.keys(projectiles).length;
+        p1.lastWeaponChange = k.time();
+    });
+    k.onButtonPress("p2_switch", () => {
+        p2.selectedWeapon = (p2.selectedWeapon + 1) % Object.keys(projectiles).length;
+        p2.lastWeaponChange = k.time();
+    });
     
     k.onButtonPress("p1_fire", () => {
-        if (p1.stamina <= 0 || p1.recharging) return;
-        p1.consumeStamina(20);
-        const projectile = k.add([
-            k.pos(p1.pos),
-            k.area({ isSensor: true }),
-            k.rect(5, 5),
-            k.color(k.WHITE),
-            k.move(p2.pos.angle(p1.pos), 300),
-            k.offscreen({ destroy: true }),
-            "projectile",
-        ]);
-        projectile.onCollide("player", (p) => {
-            if (p !== p1) {
-                p1.stamina += 5;
-                p.consumeStamina(40);
-                projectile.destroy();
-            }
-        });
+        if (p1.stamina <= projectiles[p1.selectedWeapon].staminaCost || p1.recharging) return;
+        p1.consumeStamina(projectiles[p1.selectedWeapon].staminaCost);
+        shootProjectile(p1, p2, p1.selectedWeapon);
     });
     k.onButtonPress("p2_fire", () => {
-        if (p2.stamina <= 0 || p2.recharging) return;
-        p2.consumeStamina(20);
-        const projectile = k.add([
-            k.pos(p2.pos),
-            k.area({ isSensor: true }),
-            k.rect(5, 5),
-            k.color(k.WHITE),
-            k.move(p1.pos.angle(p2.pos), 300),
-            k.offscreen({ destroy: true }),
-            "projectile",
-        ]);
-        projectile.onCollide("player", (p) => {
-            if (p !== p2) {
-                p2.stamina += 5;
-                p.consumeStamina(40);
-                projectile.destroy();
-            }
-        });
+        if (p2.stamina <= projectiles[p2.selectedWeapon].staminaCost || p2.recharging) return;
+        p2.consumeStamina(projectiles[p2.selectedWeapon].staminaCost);
+        shootProjectile(p2, p1, p2.selectedWeapon);
     });
     
     p1.onDraw(() => {
@@ -445,6 +621,14 @@ function setupPlayers() {
             pos: k.vec2(32, -30),
             align: "center",
         });
+        if (k.time() - p1.lastWeaponChange < 1000) {
+            k.drawText({
+                text: projectiles[p1.selectedWeapon].name,
+                size: 12,
+                pos: k.vec2(0, 32),
+                align: "left",
+            });
+        }
     });
     p2.onDraw(() => {
         k.drawText({
@@ -453,6 +637,14 @@ function setupPlayers() {
             pos: k.vec2(32, -30),
             align: "center",
         });
+        if (k.time() - p2.lastWeaponChange < 1000) {
+            k.drawText({
+                text: projectiles[p2.selectedWeapon].name,
+                size: 12,
+                pos: k.vec2(0, 32),
+                align: "left",
+            });
+        }
     });
     
     
@@ -474,6 +666,11 @@ function setupPlayers() {
             k.go("winner", "P2");
         }
     });
+
+    k.onKeyPress("escape", () => {
+        k.go("main_menu");
+    });
+
     return { p1, p2 }
 }
 
@@ -482,26 +679,27 @@ k.scene("game_grab", () => {
 
     const { p1, p2 } = setupPlayers();
 
+    function findCollectiblePos() {
+        let out = randomPos(50);
+        do {
+            out = randomPos(50);
+        } while (out.dist(p1.pos) < 50 || out.dist(p2.pos) < 50);
+        return out;
+    }
+
     const collectible = k.add([
         k.sprite(k.choose(objs)),
-        k.pos(randomPos(50)),
+        k.pos(findCollectiblePos()),
+        k.body(),
         k.anchor("center"),
-        k.area({ isSensor: true }),
+        k.area(),
     ]);
 
     collectible.onCollide("player", (p) => {
         p.score += 1;
-        collectible.pos = randomPos(50);
+        p.stamina += 15;
+        collectible.pos = findCollectiblePos();
         collectible.sprite = k.choose(objs);
-        collectible.isSensor = true;
-        const other = p === p1 ? p2 : p1;
-        while (
-            collectible.pos.dist(p.pos) < 150 ||
-            collectible.pos.dist(other.pos) < 50 // Give the other player a fair chance to reach it
-        ) {
-            console.log("Collectible too close to players, repositioning...");
-            collectible.pos = randomPos(50);
-        }
     });
 
 });
