@@ -1,4 +1,5 @@
-import { k, PLAYER_SPEED, processMoveVel } from ".";
+import { PLAYER_SPEED, processMoveVel } from ".";
+import { k } from "./kaplay";
 import { objs } from "./resources";
 import { button } from "./utils";
     

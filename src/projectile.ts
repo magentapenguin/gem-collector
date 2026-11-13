@@ -1,5 +1,5 @@
 import type * as kt from "kaplay";
-import { k } from ".";
+import { k } from "./kaplay";
 
 export enum ProjectileType {
     NORMAL,
@@ -27,7 +27,7 @@ export const projectiles: Record<ProjectileType, { staminaCost: number; name: st
     },
     [ProjectileType.TRANSGENDERDEATHRAY]: {
         hidden: true,
-        staminaCost: 100,
+        staminaCost: 0,
         name: "Transgender Deathray"
     }
 };
@@ -102,7 +102,7 @@ export function shootProjectile(shooter: kt.GameObj, target: kt.GameObj, type: P
             }
             const projectiles = [];
             for (const angle of angles) {
-                let proj = createProjectile(angle, { projectileOpts: { damage: 5, vamp: 0, maxAge: 3, maxAgeRange: 2 } });
+                let proj = createProjectile(angle, { projectileOpts: { damage: 5, vamp: 0, maxAge: 2 } });
                 proj.onUpdate(() => {
                     proj.move(k.Vec2.fromAngle(angle).scale(300));
                 });
@@ -131,7 +131,7 @@ export function shootProjectile(shooter: kt.GameObj, target: kt.GameObj, type: P
             }
             const projectiles = [];
             for (const angle of angles) {
-                const proj = createProjectile(angle, { size: k.vec2(8, 5), projectileOpts: { damage: 1, vamp: 0, maxAge: 3, maxAgeRange: 2 } });
+                const proj = createProjectile(angle, { size: k.vec2(8, 5), projectileOpts: { damage: 1, vamp: 0, maxAge: 5, maxAgeRange: 2 } });
                 proj.onUpdate(() => {
                     const angle = k.lerpAngle(proj.angle, target.pos.angle(proj.pos), k.dt() * 2);
                     proj.angle = angle;
@@ -154,27 +154,29 @@ export function shootProjectile(shooter: kt.GameObj, target: kt.GameObj, type: P
             const proj = k.add([
                 k.pos(shooter.pos),
                 k.rect(k.width() + k.height(), 15),
-                k.color(0, 255, 255),
+                k.color(k.rgb(0, 225, 255)),
                 k.area({ isSensor: true }),
                 k.rotate(shooter.pos.angle(target.pos)),
                 k.anchor("right"),
                 k.opacity(1),
                 "projectile"
             ]);
-            proj.add([
-                k.rect(proj.width, proj.height / 5 * 3),
-                k.pos(0, 0),
-                k.anchor("right"),
-                k.color(255, 0, 255),
-                k.opacity(1),
-            ]);
-            proj.add([
-                k.rect(proj.width, proj.height / 5),
-                k.pos(0, 0),
-                k.anchor("right"),
-                k.color(255, 255, 255),
-                k.opacity(1),
-            ]);
+            proj.onDraw(() => {
+                k.drawRect({
+                    width: proj.width,
+                    height: proj.height / 5 * 3,
+                    anchor: "right",
+                    color: k.rgb(255, 0, 255),
+                    opacity: proj.opacity,
+                });
+                k.drawRect({
+                    width: proj.width,
+                    height: proj.height / 5,
+                    anchor: "right",
+                    color: k.rgb(255, 255, 255),
+                    opacity: proj.opacity,
+                });
+            });
             proj.onUpdate(() => {
                 proj.opacity -= k.clamp(1 - proj.opacity + 0.01, 0, 1) * 4 * k.dt();
                 proj.children.forEach(child => {
